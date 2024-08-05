@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import './App.css';
-import { Row, Col, Select, Button, Spin } from 'antd';
-import { translateText } from './store/translationSlice'; // Import action creator
+import { Row, Col, Select, Button } from 'antd';
+import { translateText } from './store/translationSlice';
 import { languages } from './constant/languages';
 import { speechToVoice } from './store/speechToVoiceSlice';
+
 const { Option } = Select;
 
 const App = () => {
@@ -12,11 +13,14 @@ const App = () => {
   const { translatedText, loading } = useSelector((state) => state.translation);
   const { audioUrl, loading: voiceLoading } = useSelector((state) => state.speechToVoice);
   const [transcript, setTranscript] = useState('');
-  const [startSpeech, setStartSpeech] = useState(false);
+  const [allTranscript, setAllTranscript] = useState([]);
+  const [translatedSentences, setTranslatedSentences] = useState([]);
   const [language, setLanguage] = useState('en');
+  const [isRecording, setIsRecording] = useState(false);
+  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
   const recognitionRef = useRef(null);
-
-  console.log(audioUrl, 'audioUrl')
+  const transcriptsEndRef = useRef(null);
+  const translatedEndRef = useRef(null);
 
   useEffect(() => {
     if (transcript && language) {
@@ -25,11 +29,38 @@ const App = () => {
   }, [transcript, language, dispatch]);
 
   useEffect(() => {
-    if (translatedText && language) {
-      // Assuming translatedText contains the text to convert to speech
-      dispatch(speechToVoice({ text: translatedText?.translated_text, lang: language }));
+    if (translatedText?.translated_text) {
+      setTranslatedSentences((prevSentences) => [
+        ...prevSentences,
+        translatedText.translated_text
+      ]);
     }
-  }, [translatedText, language, dispatch]);
+  }, [translatedText]);
+
+  useEffect(() => {
+    if (translatedSentences.length > 0 && audioUrl === null) {
+      speakNextSentence();
+    }
+  }, [translatedSentences, audioUrl]);
+
+  useEffect(() => {
+    if (allTranscript.length > 0) {
+      transcriptsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [allTranscript]);
+
+  useEffect(() => {
+    if (translatedSentences.length > 0) {
+      translatedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [translatedSentences]);
+
+  const speakNextSentence = () => {
+    if (translatedSentences.length > 0) {
+      const sentence = translatedSentences[currentSentenceIndex];
+      dispatch(speechToVoice({ text: sentence, lang: language }));
+    }
+  };
 
   const initializeRecognition = async (lang) => {
     try {
@@ -56,9 +87,13 @@ const App = () => {
       recognition.onresult = (event) => {
         let resultText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          resultText += event.results[i][0].transcript.trim() + ' ';
+          if (event.results[i].isFinal) {
+            resultText = event.results[i][0].transcript.trim();
+          }
+          setTranscript(resultText);
         }
-        setTranscript(resultText.trim());
+        if (resultText)
+          setAllTranscript(item => [...item, resultText])
       };
 
       recognition.onerror = (event) => {
@@ -66,8 +101,8 @@ const App = () => {
       };
 
       recognition.onend = () => {
-        if (startSpeech) {
-          initializeRecognition(language);
+        if (isRecording) {
+          initializeRecognition(language); // Restart recognition if needed
         }
       };
 
@@ -77,67 +112,78 @@ const App = () => {
     }
   };
 
-  const stopRecognition = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-  };
-
-  const startRecording = () => {
-    initializeRecognition(language);
-  };
-
-  const onClickStartRecording = () => {
-    if (startSpeech) {
-      stopRecognition();
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
     } else {
-      startRecording();
+      initializeRecognition(language);
+      setAllTranscript([]);
+      setTranslatedSentences([]);
     }
-    setStartSpeech(prevState => !prevState);
+    setIsRecording(!isRecording);
   };
 
   const onChangeLanguage = (lang) => {
     setLanguage(lang);
   };
 
-  // Safely handle the rendering of translatedText
-  // const renderTranslatedText = () => {
-  //   if (typeof translatedText === 'string') {
-  //     return translatedText;
-  //   } else if (translatedText && typeof translatedText === 'object') {
-  //     return JSON.stringify(translatedText); // or extract specific property, e.g., translatedText.translated_text
-  //   }
-  //   return 'No translation available.';
-  // };
+  const handleAudioEnded = () => {
+    if (currentSentenceIndex < translatedSentences.length - 1) {
+      setCurrentSentenceIndex((prevIndex) => prevIndex + 1);
+    } else {
+      setCurrentSentenceIndex(0); // Reset index or handle end of queue
+      setTranslatedSentences([]); // Clear the queue if needed
+    }
+  };
 
   return (
     <div className="App">
       <h1>Speech to Speech Translation</h1>
-      <Row>
-        <Col xs={12} sm={8} md={8} lg={8} xl={8}>
-          <h2>Recognized Text: </h2>
-          <p>{transcript}</p>
+      <Row gutter={16}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+          <h2>Recognized Text:</h2>
+          <div className="transcripts">
+            {allTranscript.length > 0 && allTranscript.map((item, index) => <p key={index}>{item}</p>)}
+            <div ref={transcriptsEndRef} />
+          </div>
         </Col>
-        <Col xs={12} sm={8} md={8} lg={8} xl={8}>
-          <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-            <Button onClick={onClickStartRecording}>
-              {startSpeech ? 'Stop Recording' : 'Start Recording'}
+        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+          <div className="button-container">
+            <Button onClick={toggleRecording} type="primary">
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
             </Button>
-          </Col>
-          <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-            <Select style={{ width: 128, marginTop: 10 }} onChange={onChangeLanguage} id="language" placeholder='Please Select Target Language' defaultValue="en">
+          </div>
+          <div className="select-container">
+            <Select style={{ width: 128 }} onChange={onChangeLanguage} id="language" placeholder="Select Target Language" defaultValue="en">
               {languages.map(item => <Option key={item.id} value={item.code}>{item.name}</Option>)}
             </Select>
-          </Col>
-          <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+          </div>
+          <div className="audio-container">
             <h2>Audio Output:</h2>
-            <audio src={audioUrl} controls />
-          </Col>
+            {audioUrl ? (
+              <audio
+                src={`http://localhost:5000/audio/${audioUrl.split('/').pop()}`}
+                controls
+                autoPlay
+                onEnded={handleAudioEnded}
+                onError={(e) => console.error('Audio playback error:', e)}
+              />
+            ) : (
+              'Audio is not coming?'
+            )}
+          </div>
         </Col>
-        <Col xs={12} sm={8} md={8} lg={8} xl={8}>
+        <Col xs={24} sm={12} md={8} lg={8} xl={8}>
           <h2>Translated Text:</h2>
-          {loading ? <Spin /> : translatedText?.translated_text}
+          <div className="scrollable-text">
+            {translatedSentences.map((sentence, index) => (
+              <p key={index}>{sentence}</p>
+            ))}
+            <div ref={translatedEndRef} />
+          </div>
         </Col>
       </Row>
     </div>

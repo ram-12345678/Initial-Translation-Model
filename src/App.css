@@ -1,11 +1,59 @@
 .App {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+  padding: 20px;
+  background-color: #f5f5f5;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+h2 {
+  color: #444;
+  margin-bottom: 10px;
+}
+
+.transcripts, .scrollable-text {
+  height: 270px; /* Adjust height as needed */
+  overflow-y: auto; /* Enable vertical scrolling */
+  border: 1px solid #ccc;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 5px;
+}
+
+.transcripts p, .scrollable-text p {
+  margin: 0 0 10px;
+  padding: 5px;
+  background-color: #e1f5fe;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.button-container {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.select-container {
+  margin-top: 10px;
   text-align: center;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.audio-container {
+  text-align: center;
+  margin-top: 20px;
 }
+
+.scrollable-text {
+  margin-top: 20px;
+}
+
 
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {

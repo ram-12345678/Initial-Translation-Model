@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axiosInstance from './actions/axiosConfig'; // Adjust the path as needed
-import { message as antMessage } from 'antd';
 
 // Async thunk for speech to voice
 export const speechToVoice = createAsyncThunk(
@@ -10,7 +9,7 @@ export const speechToVoice = createAsyncThunk(
       const response = await axiosInstance.post('/text-to-speech', data);
       return response.data;
     } catch (error) {
-      antMessage.error('Failed to convert speech to voice. Please try again later.');
+      console.log('Failed to convert speech to voice. Please try again later.');
       return rejectWithValue(error.response ? error.response.data : error.message);
     }
   }

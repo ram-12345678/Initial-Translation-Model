@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axiosInstance from './actions/axiosConfig';
-import { message as antMessage } from 'antd';
 
 // Async thunk for translation
 export const translateText = createAsyncThunk(
@@ -10,7 +9,7 @@ export const translateText = createAsyncThunk(
       const response = await axiosInstance.post('/translate', data);
       return response.data;
     } catch (error) {
-      antMessage.error('Failed to translate text. Please try again later.');
+      console.log('Failed to translate text. Please try again later.');
       return rejectWithValue(error.response ? error.response.data : error.message);
     }
   }

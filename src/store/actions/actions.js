@@ -1,4 +1,3 @@
-import { message as antMessage } from 'antd';
 import axiosInstance from './axiosConfig';
 
 export const TRANSLATE_SPEECH_TO_TEXT = 'TRANSLATE_SPEECH_TO_TEXT';
@@ -28,7 +27,6 @@ export const translateText = (data) => {
       dispatch(dispatchSpeechToText(response.data));
     } catch (error) {
       console.error('Translation API error:', error);
-      antMessage.error('Failed to translate text. Please try again later.');
       dispatch(dispatchTranslateTextFailure(error));
     }
   };
