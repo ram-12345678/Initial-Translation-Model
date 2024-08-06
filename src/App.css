@@ -25,14 +25,17 @@ h2 {
   padding: 10px;
   background-color: #fff;
   border-radius: 5px;
+  box-shadow: inset 0 1px 5px rgba(0, 0, 0, 0.1);
 }
 
 .transcripts p, .scrollable-text p {
   margin: 0 0 10px;
-  padding: 5px;
+  padding: 10px;
   background-color: #e1f5fe;
   border-radius: 4px;
   text-align: left;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
 }
 
 .button-container {
@@ -53,6 +56,7 @@ h2 {
 .scrollable-text {
   margin-top: 20px;
 }
+
 
 
 @media (prefers-reduced-motion: no-preference) {

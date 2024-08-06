@@ -10,8 +10,8 @@ const { Option } = Select;
 
 const App = () => {
   const dispatch = useDispatch();
-  const { translatedText, loading } = useSelector((state) => state.translation);
-  const { audioUrl, loading: voiceLoading } = useSelector((state) => state.speechToVoice);
+  const { translatedText } = useSelector((state) => state.translation);
+  const { audioUrl } = useSelector((state) => state.speechToVoice);
   const [transcript, setTranscript] = useState('');
   const [allTranscript, setAllTranscript] = useState([]);
   const [translatedSentences, setTranslatedSentences] = useState([]);
@@ -32,16 +32,16 @@ const App = () => {
     if (translatedText?.translated_text) {
       setTranslatedSentences((prevSentences) => [
         ...prevSentences,
-        translatedText.translated_text
+        translatedText.translated_text,
       ]);
     }
   }, [translatedText]);
 
   useEffect(() => {
-    if (translatedSentences.length > 0 && audioUrl === null) {
+    if (translatedSentences.length > 0 && currentSentenceIndex < translatedSentences.length) {
       speakNextSentence();
     }
-  }, [translatedSentences, audioUrl]);
+  }, [translatedSentences, currentSentenceIndex]);
 
   useEffect(() => {
     if (allTranscript.length > 0) {
@@ -56,8 +56,8 @@ const App = () => {
   }, [translatedSentences]);
 
   const speakNextSentence = () => {
-    if (translatedSentences.length > 0) {
-      const sentence = translatedSentences[currentSentenceIndex];
+    const sentence = translatedSentences[currentSentenceIndex];
+    if (sentence) {
       dispatch(speechToVoice({ text: sentence, lang: language }));
     }
   };
@@ -89,11 +89,10 @@ const App = () => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
             resultText = event.results[i][0].transcript.trim();
+            setTranscript(resultText);
+            setAllTranscript((item) => [...item, resultText]);
           }
-          setTranscript(resultText);
         }
-        if (resultText)
-          setAllTranscript(item => [...item, resultText])
       };
 
       recognition.onerror = (event) => {
@@ -101,9 +100,7 @@ const App = () => {
       };
 
       recognition.onend = () => {
-        if (isRecording) {
-          initializeRecognition(language); // Restart recognition if needed
-        }
+        initializeRecognition(language); // Restart recognition if needed
       };
 
       recognition.start();
@@ -122,6 +119,7 @@ const App = () => {
       initializeRecognition(language);
       setAllTranscript([]);
       setTranslatedSentences([]);
+      setCurrentSentenceIndex(0);
     }
     setIsRecording(!isRecording);
   };
@@ -131,7 +129,7 @@ const App = () => {
   };
 
   const handleAudioEnded = () => {
-    if (currentSentenceIndex < translatedSentences.length - 1) {
+    if (currentSentenceIndex < translatedSentences.length) {
       setCurrentSentenceIndex((prevIndex) => prevIndex + 1);
     } else {
       setCurrentSentenceIndex(0); // Reset index or handle end of queue
