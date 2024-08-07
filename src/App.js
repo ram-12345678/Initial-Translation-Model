@@ -17,8 +17,9 @@ const App = () => {
   const [translatedSentences, setTranslatedSentences] = useState([]);
   const [language, setLanguage] = useState('en');
   const [isRecording, setIsRecording] = useState(false);
-  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
   const recognitionRef = useRef(null);
+  const isSpeakingRef = useRef(false);
+  const queueRef = useRef([]);
   const transcriptsEndRef = useRef(null);
   const translatedEndRef = useRef(null);
 
@@ -34,14 +35,12 @@ const App = () => {
         ...prevSentences,
         translatedText.translated_text,
       ]);
+      queueRef.current.push(translatedText.translated_text);
+      if (!isSpeakingRef.current) {
+        speakNextSentence();
+      }
     }
   }, [translatedText]);
-
-  useEffect(() => {
-    if (translatedSentences.length > 0 && currentSentenceIndex < translatedSentences.length) {
-      speakNextSentence();
-    }
-  }, [translatedSentences, currentSentenceIndex]);
 
   useEffect(() => {
     if (allTranscript.length > 0) {
@@ -56,9 +55,15 @@ const App = () => {
   }, [translatedSentences]);
 
   const speakNextSentence = () => {
-    const sentence = translatedSentences[currentSentenceIndex];
-    if (sentence) {
-      dispatch(speechToVoice({ text: sentence, lang: language }));
+    if (queueRef.current.length > 0) {
+      const sentence = queueRef.current.shift();
+      isSpeakingRef.current = true;
+      dispatch(speechToVoice({ text: sentence, lang: language })).then(() => {
+        isSpeakingRef.current = false;
+        speakNextSentence(); // Speak the next sentence in the queue
+      });
+    } else {
+      isSpeakingRef.current = false;
     }
   };
 
@@ -100,7 +105,9 @@ const App = () => {
       };
 
       recognition.onend = () => {
-        initializeRecognition(language); // Restart recognition if needed
+        if (!isRecording) {
+          recognition.start(); // Restart recognition if needed
+        }
       };
 
       recognition.start();
@@ -119,7 +126,7 @@ const App = () => {
       initializeRecognition(language);
       setAllTranscript([]);
       setTranslatedSentences([]);
-      setCurrentSentenceIndex(0);
+      queueRef.current = [];
     }
     setIsRecording(!isRecording);
   };
@@ -129,12 +136,7 @@ const App = () => {
   };
 
   const handleAudioEnded = () => {
-    if (currentSentenceIndex < translatedSentences.length) {
-      setCurrentSentenceIndex((prevIndex) => prevIndex + 1);
-    } else {
-      setCurrentSentenceIndex(0); // Reset index or handle end of queue
-      setTranslatedSentences([]); // Clear the queue if needed
-    }
+    speakNextSentence(); // Move to the next sentence when audio ends
   };
 
   return (
