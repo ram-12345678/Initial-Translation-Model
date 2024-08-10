@@ -36,11 +36,19 @@ const App = () => {
         translatedText.translated_text,
       ]);
       queueRef.current.push(translatedText.translated_text);
-      if (!isSpeakingRef.current) {
-        speakNextSentence();
-      }
     }
   }, [translatedText]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      console.log(!isSpeakingRef.current && queueRef.current.length > 0, '!isSpeakingRef.current && queueRef.current.length > 0')
+      if (!isSpeakingRef.current && queueRef.current.length > 0) {
+        speakNextSentence();
+      }
+    }, 1000); // Check every second if there's a sentence to speak
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (allTranscript.length > 0) {
@@ -54,18 +62,46 @@ const App = () => {
     }
   }, [translatedSentences]);
 
-  const speakNextSentence = () => {
+  const speakNextSentence = async () => {
     if (queueRef.current.length > 0) {
       const sentence = queueRef.current.shift();
       isSpeakingRef.current = true;
-      dispatch(speechToVoice({ text: sentence, lang: language })).then(() => {
+
+      try {
+        const result = await dispatch(speechToVoice({ text: sentence, lang: language })).unwrap();
+        // Assuming result returns an object with the audioUrl as a string
+        const audioUrl = result.audioUrl;
+
+        // Check if audioUrl is a string before splitting
+        if (typeof audioUrl === "string") {
+          const audioSrc = `http://localhost:5000/audio/${audioUrl.split('/').pop()}`;
+
+          const audio = new Audio(audioSrc);
+          audio.play();
+
+          // Wait for the audio to finish playing before continuing
+          await new Promise((resolve) => {
+            audio.onended = () => {
+              isSpeakingRef.current = false;
+              resolve();
+            };
+            audio.onerror = (e) => {
+              console.error('Audio playback error:', e);
+              isSpeakingRef.current = false;
+              resolve();
+            };
+          });
+        } else {
+          console.error('Invalid audioUrl:', audioUrl);
+        }
+      } catch (error) {
+        console.error('Error during speech synthesis:', error);
         isSpeakingRef.current = false;
-        speakNextSentence(); // Speak the next sentence in the queue
-      });
-    } else {
-      isSpeakingRef.current = false;
+      }
     }
   };
+
+
 
   const initializeRecognition = async (lang) => {
     try {
@@ -105,8 +141,8 @@ const App = () => {
       };
 
       recognition.onend = () => {
-        if (!isRecording) {
-          recognition.start(); // Restart recognition if needed
+        if (isRecording) {
+          recognition.start(); // Restart recognition if still recording
         }
       };
 
@@ -133,10 +169,6 @@ const App = () => {
 
   const onChangeLanguage = (lang) => {
     setLanguage(lang);
-  };
-
-  const handleAudioEnded = () => {
-    speakNextSentence(); // Move to the next sentence when audio ends
   };
 
   return (
@@ -168,7 +200,7 @@ const App = () => {
                 src={`http://localhost:5000/audio/${audioUrl.split('/').pop()}`}
                 controls
                 autoPlay
-                onEnded={handleAudioEnded}
+                onEnded={() => isSpeakingRef.current = false} // Reset speaking flag when audio ends
                 onError={(e) => console.error('Audio playback error:', e)}
               />
             ) : (
