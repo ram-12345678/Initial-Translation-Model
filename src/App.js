@@ -12,7 +12,6 @@ const App = () => {
   const dispatch = useDispatch();
   const { translatedText } = useSelector((state) => state.translation);
   const { audioUrl } = useSelector((state) => state.speechToVoice);
-  const [transcript, setTranscript] = useState('');
   const [allTranscript, setAllTranscript] = useState([]);
   const [translatedSentences, setTranslatedSentences] = useState([]);
   const [language, setLanguage] = useState('en');
@@ -22,13 +21,8 @@ const App = () => {
   const queueRef = useRef([]);
   const transcriptsEndRef = useRef(null);
   const translatedEndRef = useRef(null);
-
-  useEffect(() => {
-    if (transcript && language) {
-      dispatch(translateText({ text: transcript, lang: language }));
-    }
-  }, [transcript, language, dispatch]);
-
+  const processedSentences = useRef(new Set());
+ 
   useEffect(() => {
     if (translatedText?.translated_text) {
       setTranslatedSentences((prevSentences) => [
@@ -41,12 +35,10 @@ const App = () => {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      console.log(!isSpeakingRef.current && queueRef.current.length > 0, '!isSpeakingRef.current && queueRef.current.length > 0')
       if (!isSpeakingRef.current && queueRef.current.length > 0) {
         speakNextSentence();
       }
-    }, 1000); // Check every second if there's a sentence to speak
-
+    }, 1000);
     return () => clearInterval(intervalId);
   }, []);
 
@@ -62,46 +54,57 @@ const App = () => {
     }
   }, [translatedSentences]);
 
-  const speakNextSentence = async () => {
-    if (queueRef.current.length > 0) {
-      const sentence = queueRef.current.shift();
-      isSpeakingRef.current = true;
+  const extractSentences = (text, onSentenceMatch, processedSentences) => {
+    const regex = /(है|हूँ|थे|हों|होगा|होगी|था|थे)(?=\s*|[।!?])/g;
 
-      try {
-        const result = await dispatch(speechToVoice({ text: sentence, lang: language })).unwrap();
-        // Assuming result returns an object with the audioUrl as a string
-        const audioUrl = result.audioUrl;
+    let lastIndex = 0;
+    let accumulatedText = '';
+    let match;
 
-        // Check if audioUrl is a string before splitting
-        if (typeof audioUrl === "string") {
-          const audioSrc = `http://localhost:5000/audio/${audioUrl.split('/').pop()}`;
+    while ((match = regex.exec(text)) !== null) {
+      const startIndex = match.index;
+      const endIndex = regex.lastIndex;
 
-          const audio = new Audio(audioSrc);
-          audio.play();
+      if (startIndex === lastIndex) {
+        console.warn('No progress in regex match, breaking the loop to avoid infinite loop.');
+        break;
+      }
 
-          // Wait for the audio to finish playing before continuing
-          await new Promise((resolve) => {
-            audio.onended = () => {
-              isSpeakingRef.current = false;
-              resolve();
-            };
-            audio.onerror = (e) => {
-              console.error('Audio playback error:', e);
-              isSpeakingRef.current = false;
-              resolve();
-            };
-          });
-        } else {
-          console.error('Invalid audioUrl:', audioUrl);
-        }
-      } catch (error) {
-        console.error('Error during speech synthesis:', error);
-        isSpeakingRef.current = false;
+      accumulatedText += text.slice(lastIndex, endIndex);
+
+      lastIndex = endIndex;
+
+      const trimmedSentence = accumulatedText.trim();
+      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
+        onSentenceMatch(trimmedSentence);
+        processedSentences.add(trimmedSentence); 
+      }
+
+      accumulatedText = '';
+    }
+
+    if (accumulatedText.length > 0) {
+      const trimmedSentence = accumulatedText.trim();
+      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
+        console.log('Processing remaining sentence:', trimmedSentence);
+        onSentenceMatch(trimmedSentence);
+        processedSentences.add(trimmedSentence); 
       }
     }
+
+    regex.lastIndex = 0;
   };
 
-
+  const processTranscript = (transcript) => {
+    extractSentences(transcript, (sentence) => {
+      const trimmedSentence = sentence.trim();
+      if (!processedSentences.current.has(trimmedSentence)) {
+        setAllTranscript((prev) => [...prev, trimmedSentence]);
+        processedSentences.current.add(trimmedSentence); 
+        dispatch(translateText({ text: trimmedSentence, lang: language }));
+      }
+    }, processedSentences.current);
+  };
 
   const initializeRecognition = async (lang) => {
     try {
@@ -125,15 +128,25 @@ const App = () => {
       recognition.continuous = true;
       recognition.interimResults = true;
 
+      let interimTranscript = '';
+
       recognition.onresult = (event) => {
-        let resultText = '';
+        let finalTranscript = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
-            resultText = event.results[i][0].transcript.trim();
-            setTranscript(resultText);
-            setAllTranscript((item) => [...item, resultText]);
+            finalTranscript += event.results[i][0].transcript.trim() + ' ';
+          } else {
+            interimTranscript += event.results[i][0].transcript.trim() + ' ';
           }
         }
+
+        if (finalTranscript) {
+          processTranscript(finalTranscript);
+        }
+        processTranscript(interimTranscript);
+
+        interimTranscript = '';
       };
 
       recognition.onerror = (event) => {
@@ -142,13 +155,49 @@ const App = () => {
 
       recognition.onend = () => {
         if (isRecording) {
-          recognition.start(); // Restart recognition if still recording
+          recognition.start();
         }
       };
 
       recognition.start();
     } catch (error) {
       console.error('Error initializing recognition:', error);
+    }
+  };
+
+  const speakNextSentence = async () => {
+    if (queueRef.current.length > 0) {
+      const sentence = queueRef.current.shift();
+      isSpeakingRef.current = true;
+
+      try {
+        const result = await dispatch(speechToVoice({ text: sentence, lang: language })).unwrap();
+        const audioUrl = result.audioUrl;
+
+        if (typeof audioUrl === "string") {
+          const audioSrc = `http://localhost:5000/audio/${audioUrl.split('/').pop()}`;
+
+          const audio = new Audio(audioSrc);
+          audio.play();
+
+          await new Promise((resolve) => {
+            audio.onended = () => {
+              isSpeakingRef.current = false;
+              resolve();
+            };
+            audio.onerror = (e) => {
+              console.error('Audio playback error:', e);
+              isSpeakingRef.current = false;
+              resolve();
+            };
+          });
+        } else {
+          console.error('Invalid audioUrl:', audioUrl);
+        }
+      } catch (error) {
+        console.error('Error during speech synthesis:', error);
+        isSpeakingRef.current = false;
+      }
     }
   };
 
@@ -159,6 +208,7 @@ const App = () => {
         recognitionRef.current = null;
       }
     } else {
+      processedSentences.current.clear();
       initializeRecognition(language);
       setAllTranscript([]);
       setTranslatedSentences([]);
@@ -223,3 +273,4 @@ const App = () => {
 };
 
 export default App;
+
