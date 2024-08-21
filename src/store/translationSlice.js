@@ -9,7 +9,7 @@ export const translateText = createAsyncThunk(
       const response = await axiosInstance.post('/translate', data);
       return response.data;
     } catch (error) {
-      console.log('Failed to translate text. Please try again later.');
+      console.error('Failed to translate text. Please try again later.');
       return rejectWithValue(error.response ? error.response.data : error.message);
     }
   }
@@ -29,16 +29,20 @@ const translationSlice = createSlice({
       .addCase(translateText.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.translatedText = null; // Clear previous translation on new request
       })
       .addCase(translateText.fulfilled, (state, action) => {
         state.loading = false;
-        state.translatedText = action.payload;
+        state.translatedText = refector(action.payload);
       })
       .addCase(translateText.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.translatedText = null; // Ensure no text is available for speaking
       });
   }
 });
-
+const refector = (data) => {
+  return data.translated_text !== 'Translation failed' && data
+}
 export default translationSlice.reducer;

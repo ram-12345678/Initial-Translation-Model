@@ -22,7 +22,13 @@ const App = () => {
   const transcriptsEndRef = useRef(null);
   const translatedEndRef = useRef(null);
   const processedSentences = useRef(new Set());
- 
+  const accumulatedTextRef = useRef(''); // Store unprocessed text here
+  const isRecordingRef = useRef(isRecording);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
   useEffect(() => {
     if (translatedText?.translated_text) {
       setTranslatedSentences((prevSentences) => [
@@ -55,52 +61,52 @@ const App = () => {
   }, [translatedSentences]);
 
   const extractSentences = (text, onSentenceMatch, processedSentences) => {
-    const regex = /(है|हूँ|थे|हों|होगा|होगी|था|थे)(?=\s*|[।!?])/g;
+    const sentenceEndings = ['है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है', 'रहे हैं', 'जाता है', 'जाती है', 'गया है', 'गई है', 'किया है', 'की है'];
+    const regex = new RegExp(`(?:\\b(?:${sentenceEndings.join('|')})\\b)`, 'g');
 
+    let match;
     let lastIndex = 0;
     let accumulatedText = '';
-    let match;
-
+    console.log(regex.exec(text), 'regex.exec(text)')
     while ((match = regex.exec(text)) !== null) {
-      const startIndex = match.index;
       const endIndex = regex.lastIndex;
 
-      if (startIndex === lastIndex) {
-        console.warn('No progress in regex match, breaking the loop to avoid infinite loop.');
-        break;
-      }
-
       accumulatedText += text.slice(lastIndex, endIndex);
-
       lastIndex = endIndex;
-
+      console.log(accumulatedText, 'accumulatedText', match, 'match')
       const trimmedSentence = accumulatedText.trim();
       if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
         onSentenceMatch(trimmedSentence);
-        processedSentences.add(trimmedSentence); 
+        processedSentences.add(trimmedSentence);
       }
 
       accumulatedText = '';
     }
 
-    if (accumulatedText.length > 0) {
+    // Handle any remaining text without breaking it prematurely
+    if (lastIndex < text.length) {
+      accumulatedText += text.slice(lastIndex);
       const trimmedSentence = accumulatedText.trim();
-      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
-        console.log('Processing remaining sentence:', trimmedSentence);
+
+      // Only push if it appears to be a complete thought
+      if (trimmedSentence.length > 0 && sentenceEndings.some(ending => trimmedSentence.endsWith(ending)) && !processedSentences.has(trimmedSentence)) {
         onSentenceMatch(trimmedSentence);
-        processedSentences.add(trimmedSentence); 
+        processedSentences.add(trimmedSentence);
       }
     }
 
     regex.lastIndex = 0;
   };
 
+
   const processTranscript = (transcript) => {
     extractSentences(transcript, (sentence) => {
       const trimmedSentence = sentence.trim();
+      console.log(trimmedSentence, 'trimmedSentence')
+
       if (!processedSentences.current.has(trimmedSentence)) {
         setAllTranscript((prev) => [...prev, trimmedSentence]);
-        processedSentences.current.add(trimmedSentence); 
+        processedSentences.current.add(trimmedSentence);
         dispatch(translateText({ text: trimmedSentence, lang: language }));
       }
     }, processedSentences.current);
@@ -127,12 +133,10 @@ const App = () => {
       recognition.lang = 'hi-IN';
       recognition.continuous = true;
       recognition.interimResults = true;
-
       let interimTranscript = '';
 
       recognition.onresult = (event) => {
         let finalTranscript = '';
-
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript.trim() + ' ';
@@ -144,8 +148,8 @@ const App = () => {
         if (finalTranscript) {
           processTranscript(finalTranscript);
         }
-        processTranscript(interimTranscript);
 
+        processTranscript(interimTranscript);
         interimTranscript = '';
       };
 
@@ -154,7 +158,7 @@ const App = () => {
       };
 
       recognition.onend = () => {
-        if (isRecording) {
+        if (isRecordingRef.current) {
           recognition.start();
         }
       };
@@ -209,6 +213,7 @@ const App = () => {
       }
     } else {
       processedSentences.current.clear();
+      accumulatedTextRef.current = ''; // Reset accumulated text
       initializeRecognition(language);
       setAllTranscript([]);
       setTranslatedSentences([]);
@@ -273,4 +278,3 @@ const App = () => {
 };
 
 export default App;
-

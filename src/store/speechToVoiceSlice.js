@@ -9,7 +9,7 @@ export const speechToVoice = createAsyncThunk(
       const response = await axiosInstance.post('/text-to-speech', data);
       return response.data;
     } catch (error) {
-      console.log('Failed to convert speech to voice. Please try again later.');
+      console.error('Failed to convert speech to voice. Please try again later.');
       return rejectWithValue(error.response ? error.response.data : error.message);
     }
   }
@@ -29,6 +29,7 @@ const speechToVoiceSlice = createSlice({
       .addCase(speechToVoice.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.audioUrl = null; // Clear previous audio URL on new request
       })
       .addCase(speechToVoice.fulfilled, (state, action) => {
         state.loading = false;
@@ -37,6 +38,7 @@ const speechToVoiceSlice = createSlice({
       .addCase(speechToVoice.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.audioUrl = null; // Ensure audioUrl is cleared on error
       });
   }
 });
