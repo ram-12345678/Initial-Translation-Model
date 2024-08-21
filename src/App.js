@@ -63,42 +63,45 @@ const App = () => {
   const extractSentences = (text, onSentenceMatch, processedSentences) => {
     const sentenceEndings = ['है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है', 'रहे हैं', 'जाता है', 'जाती है', 'गया है', 'गई है', 'किया है', 'की है'];
     const regex = new RegExp(`(?:\\b(?:${sentenceEndings.join('|')})\\b)`, 'g');
-
+  
     let match;
     let lastIndex = 0;
     let accumulatedText = '';
-    console.log(regex.exec(text), 'regex.exec(text)')
+  
     while ((match = regex.exec(text)) !== null) {
       const endIndex = regex.lastIndex;
-
+  
+      // Accumulate text up to the detected ending
       accumulatedText += text.slice(lastIndex, endIndex);
       lastIndex = endIndex;
-      console.log(accumulatedText, 'accumulatedText', match, 'match')
+  
       const trimmedSentence = accumulatedText.trim();
+  
+      // Only process complete sentences that haven't been processed yet
       if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
-        onSentenceMatch(trimmedSentence);
-        processedSentences.add(trimmedSentence);
+        onSentenceMatch(trimmedSentence); // Process the detected complete sentence
+        processedSentences.add(trimmedSentence); // Mark the sentence as processed
       }
-
-      accumulatedText = '';
+  
+      accumulatedText = ''; // Clear the accumulated text for the next sentence
     }
-
-    // Handle any remaining text without breaking it prematurely
+  
+    // Process any remaining text after the last match, but only if it forms a complete sentence
     if (lastIndex < text.length) {
       accumulatedText += text.slice(lastIndex);
       const trimmedSentence = accumulatedText.trim();
-
-      // Only push if it appears to be a complete thought
-      if (trimmedSentence.length > 0 && sentenceEndings.some(ending => trimmedSentence.endsWith(ending)) && !processedSentences.has(trimmedSentence)) {
+  
+      // Avoid processing incomplete or partial sentences
+      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence) && sentenceEndings.some(ending => trimmedSentence.endsWith(ending))) {
         onSentenceMatch(trimmedSentence);
         processedSentences.add(trimmedSentence);
       }
     }
-
-    regex.lastIndex = 0;
+  
+    regex.lastIndex = 0; // Reset the regex index for the next call
   };
-
-
+  
+  
   const processTranscript = (transcript) => {
     extractSentences(transcript, (sentence) => {
       const trimmedSentence = sentence.trim();
