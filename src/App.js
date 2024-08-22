@@ -59,61 +59,80 @@ const App = () => {
       translatedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [translatedSentences]);
-
+ 
   const extractSentences = (text, onSentenceMatch, processedSentences) => {
-    const sentenceEndings = ['है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है', 'रहे हैं', 'जाता है', 'जाती है', 'गया है', 'गई है', 'किया है', 'की है'];
-    const regex = new RegExp(`(?:\\b(?:${sentenceEndings.join('|')})\\b)`, 'g');
-  
+    const sentenceEndings = [
+      'है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है', 
+      'रहे हैं', 'जाता है', 'जाती है', 'गया है', 'गई है', 'किया है', 'की है',
+      'किया था', 'किया है', 'किए हैं', 'दिया है', 'दी है', 'दिए हैं', 'रहेंगे', 
+      'जाएगा', 'जाएगी', 'जाएंगे', 'देखा है', 'देखा था', 'मिला है', 'मिली है', 
+      'मिले हैं', 'कहा है', 'कहा था', 'बताया है', 'बताया था', 'सकता है', 
+      'सकती है', 'सकते हैं', 'लेकर', 'करते हैं', 'होता है', 'होती है', 
+      'होते हैं', 'बनाया है', 'बनाई है', 'बनाए हैं', 'चुका है', 'चुकी है', 
+      'चुके हैं', 'चाहता है', 'चाहती है', 'चाहते हैं', 'लगा है', 'लगी है', 
+      'लगे हैं', 'रहा था', 'रही थी', 'रहे थे', 'समझा है', 'समझा था', 'समझी है', 
+      'समझे हैं', 'सोचा है', 'सोचा था', 'देखने', 'समझने', 'जानने', 'करने'
+    ];
+    
+    
+    // Regex to match sentence endings
+    const regex = new RegExp(`(${sentenceEndings.join('|')})(?=[\\s\\n]|$)`, 'g');
+
+    console.log(text,'text')
     let match;
     let lastIndex = 0;
     let accumulatedText = '';
   
     while ((match = regex.exec(text)) !== null) {
       const endIndex = regex.lastIndex;
-  
-      // Accumulate text up to the detected ending
-      accumulatedText += text.slice(lastIndex, endIndex);
+      
+      // Accumulate text from the last match position to the current match position
+      accumulatedText += text.slice(lastIndex, endIndex).trim();
       lastIndex = endIndex;
-  
+      
+      // Process the accumulated text as a complete sentence
       const trimmedSentence = accumulatedText.trim();
-  
-      // Only process complete sentences that haven't been processed yet
       if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
-        onSentenceMatch(trimmedSentence); // Process the detected complete sentence
-        processedSentences.add(trimmedSentence); // Mark the sentence as processed
+        console.log(`Dubbing sentence: ${trimmedSentence}`); // Dubbing console log
+        onSentenceMatch(trimmedSentence);
+        processedSentences.add(trimmedSentence);
       }
   
-      accumulatedText = ''; // Clear the accumulated text for the next sentence
+      // Clear the accumulated text for the next segment
+      accumulatedText = '';
     }
   
-    // Process any remaining text after the last match, but only if it forms a complete sentence
+    // Process any remaining text after the last match
     if (lastIndex < text.length) {
-      accumulatedText += text.slice(lastIndex);
+      accumulatedText += text.slice(lastIndex).trim();
       const trimmedSentence = accumulatedText.trim();
-  
-      // Avoid processing incomplete or partial sentences
-      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence) && sentenceEndings.some(ending => trimmedSentence.endsWith(ending))) {
+      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence) &&
+          sentenceEndings.some(ending => trimmedSentence.endsWith(ending))) {
+        console.log(`Dubbing sentence: ${trimmedSentence}`); // Dubbing console log
         onSentenceMatch(trimmedSentence);
         processedSentences.add(trimmedSentence);
       }
     }
+    
+    // Reset regex lastIndex for next use
+    regex.lastIndex = 0;
   
-    regex.lastIndex = 0; // Reset the regex index for the next call
+    // Debugging output
+    console.log(`Final accumulated text: ${accumulatedText}`);
   };
-  
   
   const processTranscript = (transcript) => {
     extractSentences(transcript, (sentence) => {
       const trimmedSentence = sentence.trim();
-      console.log(trimmedSentence, 'trimmedSentence')
-
       if (!processedSentences.current.has(trimmedSentence)) {
+        console.log(`Processing sentence: ${trimmedSentence}`);
         setAllTranscript((prev) => [...prev, trimmedSentence]);
         processedSentences.current.add(trimmedSentence);
         dispatch(translateText({ text: trimmedSentence, lang: language }));
       }
     }, processedSentences.current);
   };
+  
 
   const initializeRecognition = async (lang) => {
     try {
