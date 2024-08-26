@@ -22,8 +22,9 @@ const App = () => {
   const transcriptsEndRef = useRef(null);
   const translatedEndRef = useRef(null);
   const processedSentences = useRef(new Set());
-  const accumulatedTextRef = useRef(''); // Store unprocessed text here
+  const accumulatedTextRef = useRef(''); 
   const isRecordingRef = useRef(isRecording);
+  const interimTranscriptRef = useRef('');
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -59,89 +60,51 @@ const App = () => {
       translatedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [translatedSentences]);
- 
-  const extractSentences = (text, onSentenceMatch, processedSentences) => {
+
+  const extractSentences = (text, onSentenceMatch, processedSentences, isFinal = false) => {
     const sentenceEndings = [
-      'है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है', 
-      'रहे हैं', 'जाता है', 'जाती है', 'गया है', 'गई है', 'किया है', 'की है',
-      'किया था', 'किया है', 'किए हैं', 'दिया है', 'दी है', 'दिए हैं', 'रहेंगे', 
-      'जाएगा', 'जाएगी', 'जाएंगे', 'देखा है', 'देखा था', 'मिला है', 'मिली है', 
-      'मिले हैं', 'कहा है', 'कहा था', 'बताया है', 'बताया था', 'सकता है', 
-      'सकती है', 'सकते हैं', 'लेकर', 'करते हैं', 'होता है', 'होती है', 
-      'होते हैं', 'बनाया है', 'बनाई है', 'बनाए हैं', 'चुका है', 'चुकी है', 
-      'चुके हैं', 'चाहता है', 'चाहती है', 'चाहते हैं', 'लगा है', 'लगी है', 
-      'लगे हैं', 'रहा था', 'रही थी', 'रहे थे', 'समझा है', 'समझा था', 'समझी है', 
-      'समझे हैं', 'सोचा है', 'सोचा था', 'देखने', 'समझने', 'जानने', 'करने'
+      'है', 'हूँ', 'थे', 'हों', 'होगा', 'होगी', 'था', 'थी', 'रहा है', 'रही है',
+      // add more sentence endings as needed
     ];
-    
-    
-    // Regex to match sentence endings
+
     const regex = new RegExp(`(${sentenceEndings.join('|')})(?=[\\s\\n]|$)`, 'g');
 
-    console.log(text,'text')
     let match;
     let lastIndex = 0;
-    let accumulatedText = '';
-  
+
     while ((match = regex.exec(text)) !== null) {
       const endIndex = regex.lastIndex;
-      
-      // Accumulate text from the last match position to the current match position
-      accumulatedText += text.slice(lastIndex, endIndex).trim();
+      const sentence = text.slice(lastIndex, endIndex).trim();
       lastIndex = endIndex;
-      
-      // Process the accumulated text as a complete sentence
-      const trimmedSentence = accumulatedText.trim();
-      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence)) {
-        console.log(`Dubbing sentence: ${trimmedSentence}`); // Dubbing console log
-        onSentenceMatch(trimmedSentence);
-        processedSentences.add(trimmedSentence);
-      }
-  
-      // Clear the accumulated text for the next segment
-      accumulatedText = '';
-    }
-  
-    // Process any remaining text after the last match
-    if (lastIndex < text.length) {
-      accumulatedText += text.slice(lastIndex).trim();
-      const trimmedSentence = accumulatedText.trim();
-      if (trimmedSentence.length > 0 && !processedSentences.has(trimmedSentence) &&
-          sentenceEndings.some(ending => trimmedSentence.endsWith(ending))) {
-        console.log(`Dubbing sentence: ${trimmedSentence}`); // Dubbing console log
-        onSentenceMatch(trimmedSentence);
-        processedSentences.add(trimmedSentence);
-      }
-    }
-    
-    // Reset regex lastIndex for next use
-    regex.lastIndex = 0;
-  
-    // Debugging output
-    console.log(`Final accumulated text: ${accumulatedText}`);
-  };
-  
-  const processTranscript = (transcript) => {
-    extractSentences(transcript, (sentence) => {
-      const trimmedSentence = sentence.trim();
-      if (!processedSentences.current.has(trimmedSentence)) {
-        console.log(`Processing sentence: ${trimmedSentence}`);
-        setAllTranscript((prev) => [...prev, trimmedSentence]);
-        processedSentences.current.add(trimmedSentence);
-        dispatch(translateText({ text: trimmedSentence, lang: language }));
-      }
-    }, processedSentences.current);
-  };
-  
 
-  const initializeRecognition = async (lang) => {
+      if (sentence && !processedSentences.has(sentence)) {
+        onSentenceMatch(sentence);
+        processedSentences.add(sentence);
+      }
+    }
+
+    const remainingText = text.slice(lastIndex).trim();
+    if (isFinal && remainingText && !processedSentences.has(remainingText)) {
+      onSentenceMatch(remainingText);
+      processedSentences.add(remainingText);
+    }
+  };
+
+  const processTranscript = (transcript, isFinal = false) => {
+    const handleNewSentences = (sentence) => {
+      if (sentence && !processedSentences.current.has(sentence)) {
+        setAllTranscript((prev) => [...prev, sentence]);
+        processedSentences.current.add(sentence);
+        dispatch(translateText({ text: sentence, lang: language }));
+      }
+    };
+
+    extractSentences(transcript, handleNewSentences, processedSentences.current, isFinal);
+  };
+
+  const initializeRecognition = async () => {
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
+      await navigator.mediaDevices.getUserMedia({ audio: true });
 
       const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Recognition) {
@@ -155,24 +118,24 @@ const App = () => {
       recognition.lang = 'hi-IN';
       recognition.continuous = true;
       recognition.interimResults = true;
-      let interimTranscript = '';
 
       recognition.onresult = (event) => {
         let finalTranscript = '';
+        interimTranscriptRef.current = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript.trim();
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript.trim() + ' ';
+            finalTranscript += transcript + ' ';
           } else {
-            interimTranscript += event.results[i][0].transcript.trim() + ' ';
+            interimTranscriptRef.current += transcript + ' ';
           }
         }
 
         if (finalTranscript) {
-          processTranscript(finalTranscript);
+          processTranscript(finalTranscript, true);
+        } else if (interimTranscriptRef.current) {
+          processTranscript(interimTranscriptRef.current);
         }
-
-        processTranscript(interimTranscript);
-        interimTranscript = '';
       };
 
       recognition.onerror = (event) => {
@@ -190,7 +153,6 @@ const App = () => {
       console.error('Error initializing recognition:', error);
     }
   };
-
   const speakNextSentence = async () => {
     if (queueRef.current.length > 0) {
       const sentence = queueRef.current.shift();
