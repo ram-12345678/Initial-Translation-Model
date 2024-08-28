@@ -5,7 +5,7 @@ import { Row, Col, Select, Button } from 'antd';
 import { translateText } from './store/translationSlice';
 import { languages } from './constant/languages';
 import { speechToVoice } from './store/speechToVoiceSlice';
-
+const stringSimilarity = require('string-similarity');
 const { Option } = Select;
 
 const App = () => {
@@ -22,7 +22,7 @@ const App = () => {
   const transcriptsEndRef = useRef(null);
   const translatedEndRef = useRef(null);
   const processedSentences = useRef(new Set());
-  const accumulatedTextRef = useRef(''); 
+  const accumulatedTextRef = useRef('');
   const isRecordingRef = useRef(isRecording);
   const interimTranscriptRef = useRef('');
 
@@ -71,31 +71,43 @@ const App = () => {
 
     let match;
     let lastIndex = 0;
+    let pendingText = accumulatedTextRef.current; // Text that didn’t form a complete sentence last time
 
     while ((match = regex.exec(text)) !== null) {
       const endIndex = regex.lastIndex;
       const sentence = text.slice(lastIndex, endIndex).trim();
       lastIndex = endIndex;
-
+      console.log(regex, 'regex',match,'match',pendingText,'pendingText')
       if (sentence && !processedSentences.has(sentence)) {
-        onSentenceMatch(sentence);
-        processedSentences.add(sentence);
+        const fullSentence = pendingText + ' ' + sentence; // Combine with pending text
+        pendingText = ''; // Clear pending text after use
+        onSentenceMatch(fullSentence.trim()); // Pass the combined sentence
+        processedSentences.add(fullSentence);
       }
     }
 
     const remainingText = text.slice(lastIndex).trim();
+
     if (isFinal && remainingText && !processedSentences.has(remainingText)) {
-      onSentenceMatch(remainingText);
-      processedSentences.add(remainingText);
+      const fullSentence = pendingText + ' ' + remainingText; // Append remaining to pending
+      onSentenceMatch(fullSentence.trim());
+      processedSentences.add(fullSentence);
+      pendingText = ''; // Clear pending text after use
     }
   };
 
   const processTranscript = (transcript, isFinal = false) => {
+    console.log(transcript, 'transcript');
     const handleNewSentences = (sentence) => {
-      if (sentence && !processedSentences.current.has(sentence)) {
-        setAllTranscript((prev) => [...prev, sentence]);
-        processedSentences.current.add(sentence);
-        dispatch(translateText({ text: sentence, lang: language }));
+      console.log(sentence, 'sentence');
+      const lastElement = [...processedSentences.current];
+      if (lastElement?.length > 0 && sentence) {
+        const similarity = stringSimilarity?.compareTwoStrings(lastElement.pop(), sentence);
+        if (sentence && !(similarity >= 8) && !processedSentences.current.has(sentence)) {
+          setAllTranscript((prev) => [...prev, sentence]);
+          processedSentences.current.add(sentence);
+          dispatch(translateText({ text: sentence, lang: language }));
+        }
       }
     };
 
@@ -153,15 +165,16 @@ const App = () => {
       console.error('Error initializing recognition:', error);
     }
   };
+
   const speakNextSentence = async () => {
     if (queueRef.current.length > 0) {
-      const sentence = queueRef.current.shift();
+      const qLength = queueRef.current.length;
+      const sentence = queueRef.current.splice(0, qLength).join(' ');
       isSpeakingRef.current = true;
 
       try {
         const result = await dispatch(speechToVoice({ text: sentence, lang: language })).unwrap();
         const audioUrl = result.audioUrl;
-
         if (typeof audioUrl === "string") {
           const audioSrc = `http://localhost:5000/audio/${audioUrl.split('/').pop()}`;
 
