@@ -14,7 +14,8 @@ const App = () => {
   const { audioUrl } = useSelector((state) => state.speechToVoice);
   const [allTranscript, setAllTranscript] = useState([]);
   const [translatedSentences, setTranslatedSentences] = useState([]);
-  const [language, setLanguage] = useState('en');
+  const [translatedLanguage, setTranslatedLanguage] = useState('en');
+  const [recognezedLanguage, setRecognezedLanguage] = useState('hi');
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef(null);
   const isSpeakingRef = useRef(false);
@@ -42,7 +43,7 @@ const App = () => {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      if (!isSpeakingRef.current && queueRef.current.length > 0) {
+      if (false) {
         speakNextSentence();
       }
     }, 1000);
@@ -72,12 +73,10 @@ const App = () => {
     let match;
     let lastIndex = 0;
     let pendingText = accumulatedTextRef.current; // Text that didn’t form a complete sentence last time
-
     while ((match = regex.exec(text)) !== null) {
       const endIndex = regex.lastIndex;
       const sentence = text.slice(lastIndex, endIndex).trim();
       lastIndex = endIndex;
-      console.log(regex, 'regex',match,'match',pendingText,'pendingText')
       if (sentence && !processedSentences.has(sentence)) {
         const fullSentence = pendingText + ' ' + sentence; // Combine with pending text
         pendingText = ''; // Clear pending text after use
@@ -97,18 +96,23 @@ const App = () => {
   };
 
   const processTranscript = (transcript, isFinal = false) => {
-    console.log(transcript, 'transcript');
     const handleNewSentences = (sentence) => {
-      console.log(sentence, 'sentence');
       const lastElement = [...processedSentences.current];
-      if (lastElement?.length > 0 && sentence) {
-        const similarity = stringSimilarity?.compareTwoStrings(lastElement.pop(), sentence);
-        if (sentence && !(similarity >= 8) && !processedSentences.current.has(sentence)) {
-          setAllTranscript((prev) => [...prev, sentence]);
-          processedSentences.current.add(sentence);
-          dispatch(translateText({ text: sentence, lang: language }));
+      if (sentence?.length > 10) {
+        if (lastElement?.length > 0) {
+          const similarity = stringSimilarity?.compareTwoStrings(lastElement.pop(), sentence);
+          if (sentence && !(similarity >= 8) && !processedSentences.current.has(sentence)) {
+            accumulatedTextRef.current = '';
+            setAllTranscript((prev) => [...prev, sentence]);
+            processedSentences.current.add(sentence);
+            dispatch(translateText({ text: sentence, lang: translatedLanguage }));
+          }
         }
       }
+      else {
+        accumulatedTextRef.current = sentence;
+      }
+
     };
 
     extractSentences(transcript, handleNewSentences, processedSentences.current, isFinal);
@@ -127,7 +131,7 @@ const App = () => {
       recognitionRef.current = new Recognition();
       const recognition = recognitionRef.current;
 
-      recognition.lang = 'hi-IN';
+      recognition.lang = recognezedLanguage;
       recognition.continuous = true;
       recognition.interimResults = true;
 
@@ -173,7 +177,7 @@ const App = () => {
       isSpeakingRef.current = true;
 
       try {
-        const result = await dispatch(speechToVoice({ text: sentence, lang: language })).unwrap();
+        const result = await dispatch(speechToVoice({ text: sentence, lang: translatedLanguage })).unwrap();
         const audioUrl = result.audioUrl;
         if (typeof audioUrl === "string") {
           const audioSrc = `http://localhost:5000/audio/${audioUrl.split('/').pop()}`;
@@ -211,7 +215,7 @@ const App = () => {
     } else {
       processedSentences.current.clear();
       accumulatedTextRef.current = ''; // Reset accumulated text
-      initializeRecognition(language);
+      initializeRecognition(translatedLanguage);
       setAllTranscript([]);
       setTranslatedSentences([]);
       queueRef.current = [];
@@ -219,8 +223,12 @@ const App = () => {
     setIsRecording(!isRecording);
   };
 
-  const onChangeLanguage = (lang) => {
-    setLanguage(lang);
+  const onChangeRecognizedLanguage = (lang) => {
+    setRecognezedLanguage(lang);
+  };
+
+  const onChangeTranslatedLanguage = (lang) => {
+    setTranslatedLanguage(lang);
   };
 
   return (
@@ -241,7 +249,14 @@ const App = () => {
             </Button>
           </div>
           <div className="select-container">
-            <Select style={{ width: 128 }} onChange={onChangeLanguage} id="language" placeholder="Select Target Language" defaultValue="en">
+          <h2>Recognized Language:</h2>
+            <Select style={{ width: 128 }} onChange={onChangeRecognizedLanguage} id="Recognizedlanguage" placeholder="Select Target Language" defaultValue="hi">
+              {languages.map(item => <Option key={item.id} value={item.code}>{item.name}</Option>)}
+            </Select>
+          </div>
+          <div className="select-container">
+          <h2>Translated Language:</h2>
+            <Select style={{ width: 128 }} onChange={onChangeTranslatedLanguage} id="Translatedlanguage" placeholder="Select Target Language" defaultValue="en">
               {languages.map(item => <Option key={item.id} value={item.code}>{item.name}</Option>)}
             </Select>
           </div>
