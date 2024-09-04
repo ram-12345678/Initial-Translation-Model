@@ -5,7 +5,9 @@ import { Row, Col, Select, Button, Carousel } from 'antd';
 import { translateText } from './store/translationSlice';
 import { languages } from './constant/languages';
 import { speechToVoice } from './store/speechToVoiceSlice';
-import * as XLSX from 'xlsx';
+import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
+import { saveAs } from "file-saver";
+// import logo from '/';
 // const stringSimilarity = require('string-similarity');
 const { Option } = Select;
 
@@ -184,26 +186,54 @@ const App = () => {
       }
     }
   };
-
-  const downloadSpeechAsExcel = () => {
-    // Prepare the data for the Excel sheet
-  const wsData = translatedSentences.map((sentence) => [sentence]);
-
-  // Create a new worksheet with the data
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // Set the width of the first column (A)
-  const wscols = [{ wch: 50 }]; // 'wch' is the width of the column in characters
-  ws['!cols'] = wscols;
-
-  // Create a new workbook and append the worksheet
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Translated Sentences');
-
-  // Trigger the download
-  XLSX.writeFile(wb, 'translatedSentences.xlsx');
-};
-
+  
+  const downloadSpeechAsWord = async () => {
+    // Load the logo image
+    const logoData = await fetch('./Capture.PNG').then((r) => r.blob());
+  
+    // Create a new Word document
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: logoData,
+                  transformation: {
+                    width: 100,
+                    height: 50,
+                  },
+                }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Translation Report",
+                  bold: true,
+                  size: 32,
+                  break: 1,
+                }),
+              ],
+            }),
+            ...translatedSentences.map(
+              (sentence) =>
+                new Paragraph({
+                  children: [new TextRun(sentence)],
+                })
+            ),
+          ],
+        },
+      ],
+    });
+  
+    // Generate the Word document and save it as a file
+    Packer.toBlob(doc).then((blob) => {
+      saveAs(blob, "translated_sentences.docx");
+    });
+  };
+  
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -280,7 +310,7 @@ const App = () => {
           </div>
         </Col>
         <Col xs={24} sm={24} md={24} lg={24} xl={24} style={{ position: 'relative' }}>
-          <button onClick={downloadSpeechAsExcel} className="copy-button">Copy</button>
+          <button onClick={downloadSpeechAsWord} className="copy-button">Copy</button>
         </Col>
         <Col xs={24} sm={24} md={24} lg={24} xl={24} style={{ position: 'relative' }}>
           <div className="scrollable-text-container">
